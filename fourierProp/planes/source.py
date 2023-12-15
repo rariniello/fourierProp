@@ -53,3 +53,5 @@ class Source(Plane):
 # TODO: Create gaussian source.
 
 # TODO: Create super-Gaussian source.
+
+# TODO: Create a source that loads the field/grid from a save file

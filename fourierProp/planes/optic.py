@@ -81,6 +81,8 @@ class Optic(Plane):
             self._t = value
 
 
-# TODO: Create spherical lens optic.
-
-# TODO: create axicon optic.
+class SphericalLens(Optic):
+    def __init__(self, z: float, n: float, name: str, grid: Grid, lam: float, f: float):
+        super().__init__(z, n, name, grid)
+        k = 2 * np.pi / lam
+        self.phi = -k * grid.r**2 / (2 * f)

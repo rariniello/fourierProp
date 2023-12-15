@@ -6,6 +6,7 @@ import logging
 
 from fourierProp import Plane
 from fourierProp import Grid
+from fourierProp import Source
 
 logging.basicConfig(
     format="%(asctime)s.%(msecs)03d - %(message)s",
@@ -13,8 +14,6 @@ logging.basicConfig(
     level=logging.INFO,
 )
 logger = logging.getLogger(__name__)
-
-# TODO: implement a plane that re-samples the grid to a different size/resolution
 
 
 def fourierPropagate(
@@ -39,12 +38,13 @@ def fourierPropagate(
     """
     # Expand any volumes into lists of planes
     P = createPlaneList(planes)
+    V = collectVolumes(planes)
     checkPlanes(P)
 
     grid = P[0].grid
     gridInd = 0  # Index used for planes to reference their grid
     saveGrid(grid, gridInd, savePath)
-    savePlanes(P, savePath)
+    savePlanes(P, V, savePath)
 
     E = None
     N = len(P)
@@ -52,7 +52,18 @@ def fourierPropagate(
     for i in range(N):
         # Apply any phase masks/transmission functions
         E = P[i].modifyField(E)
-        saveField(E, P[i], i, savePath, cylSymmetry)
+
+        if P[i].isResample():
+            logger.info(
+                "Resampling grid from grid {} to grid {}.".format(gridInd, gridInd + 1)
+            )
+            E = P[i].resampleFromGrid(E, grid)
+            grid = P[i].grid
+            gridInd += 1
+            saveGrid(grid, gridInd, savePath)
+            fp = FourierPropagator(lam, grid, threads)
+
+        saveField(E, P[i], i, gridInd, savePath, cylSymmetry)
         if isLastPlane(i, N):
             break
 
@@ -175,12 +186,14 @@ def checkPlanes(P: list):
         z_new = p.z
         if z_new < z_previous:
             raise ValueError(
-                "Z decreased between to subsequent planes: {} -> {}, Delta z:{:0.2e}".format(
+                "Z decreased between two subsequent planes: {} -> {}, Delta z:{:0.2e}".format(
                     p.name, P[i - 1].name, z_new
                 )
             )
         z_previous = z_new
-    # TODO: implement the second check
+
+    if not isinstance(P[0], Source):
+        raise TypeError("The first object in the planes list must be a field source.")
 
 
 def createPlaneList(planes: list) -> list:
@@ -207,6 +220,19 @@ def createPlaneList(planes: list) -> list:
 def isLastPlane(i: int, N: int):
     """Checks if the given index is the final index in the list."""
     return i == N - 1
+
+
+def collectVolumes(planes: list) -> list:
+    """Makes a new list containing all the volumes in planes.
+
+    Args:
+        planes: List of planes and volumes.
+    """
+    V = []
+    for p in planes:
+        if p.isVolume():
+            V.append(p)
+    return V
 
 
 def saveGrid(grid: Grid, gridInd: int, savePath: str | os.PathLike):
@@ -242,36 +268,59 @@ def saveGrid(grid: Grid, gridInd: int, savePath: str | os.PathLike):
     logger.info(f"Finished saving grid {gridInd}")
 
 
-def savePlanes(P: list, savePath: str | os.PathLike):
+def savePlanes(P: list, V: list, savePath: str | os.PathLike):
     """Saves information about the planes to a file.
 
     Args:
         P: List of planes to save to file.
+        V: List of volumes to save to file.
         savePath: Path to save the file at.
     """
-    # TODO need to save some info about the volumes here
-    # Maybe each volume gets a group which is a dataset of plane names?
     filename = os.path.join(savePath, "planes.h5")
     logger.info(f"Saving plane information to {filename}")
     N = len(P)
+    M = len(V)
     with h5py.File(filename, "w") as f:
         for i in range(N):
             plane = P[i]
-            attr, data = plane.getSaveData()
-            # Save the attrs as hdf5 attrs
-            group = f.create_group(f"p{i}")
-            group.attrs.update(attr)
-            # Save the data items as hdf5 datasets
-            for name, value in data.items():
-                size = np.shape(value)
-                dtype = value.dtype
-                dset = group.create_dataset(name, size, dtype=dtype)
-                dset[...] = value
+            saveObject(f, plane, f"p{i}")
+
+        for i in range(M):
+            volume = V[i]
+            saveObject(f, volume, f"v{i}")
+
     logger.info(f"Finished saving plane information")
 
 
+def saveObject(f: h5py.File, object, name: str):
+    """Saves the objects save data into the given hdf5 file.
+
+    Args:
+        f: The hdf5 file object to save the data to.
+        object: The object whose save data should be saved. The object must have
+            a method called getSaveData that return two dictionaries: attrs and data.
+        name: Name of the group representing the object in the dataset. Must be a
+            unique identifier.
+    """
+    attr, data = object.getSaveData()
+    # Save the attrs as hdf5 attrs
+    group = f.create_group(name)
+    group.attrs.update(attr)
+    # Save the data items as hdf5 datasets
+    for name, value in data.items():
+        size = np.shape(value)
+        dtype = value.dtype
+        dset = group.create_dataset(name, size, dtype=dtype)
+        dset[...] = value
+
+
 def saveField(
-    E, plane: Plane, ind: int, savePath: str | os.PathLike, cylSymmetry: bool = False
+    E,
+    plane: Plane,
+    ind: int,
+    gridInd: int,
+    savePath: str | os.PathLike,
+    cylSymmetry: bool = False,
 ):
     """Saves the electric field and data about the plane to a file.
 
@@ -279,6 +328,7 @@ def saveField(
         E: Electric field to save, complex representation [V/m].
         plane: Plane where the field is defined at.
         ind: Index of the plane in the plane list.
+        gridInd: Index of the grid used for this plane.
         savePath: Path to save the file at.
         cylSymmetry: If True, will only save the plane along the central
             slice in the x direction. Reduces the file size of the output.
@@ -296,4 +346,5 @@ def saveField(
             dset[...] = E
         dset.attrs["z"] = plane.z
         dset.attrs["index"] = ind
-    logger.info(f"Finished saving field at plane {plane.name}")
+        dset.attrs["gridIndex"] = gridInd
+    # logger.info(f"Finished saving field at plane {plane.name}")

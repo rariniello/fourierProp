@@ -35,10 +35,13 @@ class Plane:
     def isVolume(self) -> bool:
         return False
 
+    def isResample(self) -> bool:
+        return False
+
     def getSaveData(self) -> tuple[dict, dict]:
         """Creates two dictonaries fully describing the plane.
 
-        Neither dictionary should not be nested, i.e., they should only be one layer deep.
+        Neither dictionary should be nested, i.e., they should only be one layer deep.
 
         Returns:
             Two dict, the first is attributes describing the plane. The second is any data
