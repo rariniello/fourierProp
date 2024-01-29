@@ -70,8 +70,7 @@ class Volume:
             "name": self.name,
             "z_i": self.z_i,
             "z_f": self.z_f,
-            "Nz:": self.Nz,
-            "n": self.n,
+            "Nz": self.Nz,
         }
         data = {}
         return attr, data

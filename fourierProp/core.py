@@ -30,7 +30,7 @@ def fourierPropagate(
     into a series of planes. Output is saved to disk for later analysis.
 
     Args:
-        lam: Wavelength of the light [m].
+        lam: Wavelength of the light in vacuum [m].
         planes: List of planes and volumes to the simulate the propagation through.
         savePath: Path to save the output files to.
         threads: Number of threads to run the FFTs on.
@@ -98,7 +98,7 @@ class FourierPropagator:
         """Initializes the class.
 
         Args:
-            lam: The wavelength of light being propagated [m].
+            lam: The wavelength of light being propagated, in vacuum [m].
             grid: The transverse grid the field is defined on.
             threads: Number of threads to use in the fft and ifft.
         """
@@ -133,7 +133,7 @@ def kz_RS(k: float, kx: np.ndarray, ky: np.ndarray, n: float) -> np.ndarray:
     """Caluclates the spatial wavenumber in z for each grid point in Fourier space.
 
     Args:
-        k: Wavenumber of the light [rad/m].
+        k: Wavenumber of the light in vacuum [rad/m].
         kx: Coordinates in kx of each grid point in Fourier space [rad/m].
         ky: Coordinates in kx of each grid point in Fourier space [rad/m].
         n: Index of refraction between the two planes.
@@ -141,7 +141,7 @@ def kz_RS(k: float, kx: np.ndarray, ky: np.ndarray, n: float) -> np.ndarray:
     Returns:
         A numpy array with the spatial wavenumber in z at each point in Fourier space.
     """
-    return np.sqrt(k**2 * n - kx[:, None] ** 2 - ky[None, :] ** 2)
+    return np.sqrt((k*n)**2 - kx[:, None] ** 2 - ky[None, :] ** 2)
 
 
 def createFFTPlan(grid: Grid, threads: int = 1):
@@ -283,16 +283,16 @@ def savePlanes(P: list, V: list, savePath: str | os.PathLike):
     with h5py.File(filename, "w") as f:
         for i in range(N):
             plane = P[i]
-            saveObject(f, plane, f"p{i}")
+            saveObject(f, plane, f"p{i}", i)
 
         for i in range(M):
             volume = V[i]
-            saveObject(f, volume, f"v{i}")
+            saveObject(f, volume, f"v{i}", i)
 
     logger.info(f"Finished saving plane information")
 
 
-def saveObject(f: h5py.File, object, name: str):
+def saveObject(f: h5py.File, object, name: str, ind):
     """Saves the objects save data into the given hdf5 file.
 
     Args:
@@ -301,8 +301,10 @@ def saveObject(f: h5py.File, object, name: str):
             a method called getSaveData that return two dictionaries: attrs and data.
         name: Name of the group representing the object in the dataset. Must be a
             unique identifier.
+        ind: Index of the object in the planes or volumes list.
     """
     attr, data = object.getSaveData()
+    attr["index"] = ind
     # Save the attrs as hdf5 attrs
     group = f.create_group(name)
     group.attrs.update(attr)
