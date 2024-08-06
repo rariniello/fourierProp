@@ -17,7 +17,7 @@ class Volume:
         planes: List to store child planes when
     """
 
-    def __init__(self, name, n, z_i=None, z_f=None, Nz=None, z=None):
+    def __init__(self, name, n, z_i=None, z_f=None, Nz=None, z=None, modifiers=None):
         """Initializes the class.
 
         Args:
@@ -28,6 +28,9 @@ class Volume:
         self.n = n
         self.name = name
         self.planes = []
+        if not isinstance(modifiers, list) and modifiers is not None:
+            modifiers = [modifiers]
+        self.modifiers = modifiers
 
         if z is not None:
             self.z_i = z[0]
@@ -50,7 +53,7 @@ class Volume:
         """
         self.planes = []
         for i in range(self.Nz):
-            p = Plane(self.z[i], self.n, f"{self.name}_{i}")
+            p = Plane(self.z[i], self.n, f"{self.name}_{i}", modifiers=self.modifiers)
             self.planes.append(p)
         return self.planes
 

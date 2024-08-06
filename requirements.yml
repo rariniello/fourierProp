@@ -8,3 +8,4 @@ dependencies:
   - scipy=1.11.4
   - pyfftw=0.13.1
   - h5py=3.9.0
+  - json

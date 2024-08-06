@@ -3,6 +3,7 @@ import numpy as np
 import h5py
 import pyfftw
 import logging
+import json
 
 from fourierProp import Plane
 from fourierProp import Grid
@@ -16,11 +17,15 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
+# TODO cylindrical symmetry argument kept for backward compatibility, cylindircal symmetry
+# is implemented in the grid the propagator will automatically select the method based on the grids
+# XXX should be able to specify diagnostics on a plane by plane basis
 def fourierPropagate(
     lam: float,
     planes: list,
     savePath: str | os.PathLike,
     threads: int = 1,
+    diagnostics: str = "xy",
     cylSymmetry: bool = False,
 ):
     """Performs the Fourier optics simulation.
@@ -34,24 +39,33 @@ def fourierPropagate(
         planes: List of planes and volumes to the simulate the propagation through.
         savePath: Path to save the output files to.
         threads: Number of threads to run the FFTs on.
+        diagnostics: Set which output dimensions to save to disk. Options are 'x' or 'y' for 1D lineouts
+            or 'xy' for the full 2D output. Ignored if cylSymmetry is True, defaults to 'xy'.
         cylSymmetry: Set to True to only save a 1D lineout of the field at each plane, defaults to False.
+            Deprecated, use diagnostics instead, setting to True is equivalent to diagnostics='x'.
     """
     # Expand any volumes into lists of planes
     P = createPlaneList(planes)
     V = collectVolumes(planes)
+    M = collectModifiers(planes)
     checkPlanes(P)
+
+    # Find all the modifiers and associated them with planes
 
     grid = P[0].grid
     gridInd = 0  # Index used for planes to reference their grid
+    createSimulationDirectory(savePath)
+    saveSimulation(savePath, lam, cylSymmetry)
     saveGrid(grid, gridInd, savePath)
-    savePlanes(P, V, savePath)
+    savePlanes(P, V, M, savePath)
 
     E = None
     N = len(P)
+    # TODO replace by a function that gets the Fourier propagator based on the grid
     fp = FourierPropagator(lam, grid, threads)
     for i in range(N):
         # Apply any phase masks/transmission functions
-        E = P[i].modifyField(E)
+        E = P[i].modifyField(E, lam)
 
         if P[i].isResample():
             logger.info(
@@ -61,6 +75,7 @@ def fourierPropagate(
             grid = P[i].grid
             gridInd += 1
             saveGrid(grid, gridInd, savePath)
+            # TODO replace by a function that gets the Fourier propagator based on the grid
             fp = FourierPropagator(lam, grid, threads)
 
         saveField(E, P[i], i, gridInd, savePath, cylSymmetry)
@@ -141,7 +156,7 @@ def kz_RS(k: float, kx: np.ndarray, ky: np.ndarray, n: float) -> np.ndarray:
     Returns:
         A numpy array with the spatial wavenumber in z at each point in Fourier space.
     """
-    return np.sqrt((k*n)**2 - kx[:, None] ** 2 - ky[None, :] ** 2)
+    return np.sqrt((k * n) ** 2 - kx[:, None] ** 2 - ky[None, :] ** 2)
 
 
 def createFFTPlan(grid: Grid, threads: int = 1):
@@ -179,6 +194,8 @@ def checkPlanes(P: list):
         ValueError: Z decreased between to subsequent planes.
         TypeError: The first plane is not a source.
     """
+    # XXX we probably shouldn't let two planes have the same name
+    # It will confuse the user when they try to select the plane by name and unwittingly select the first plane
     z_previous = P[0].z
     N = len(P)
     for i in range(N):
@@ -187,7 +204,7 @@ def checkPlanes(P: list):
         if z_new < z_previous:
             raise ValueError(
                 "Z decreased between two subsequent planes: {} -> {}, Delta z:{:0.2e}".format(
-                    p.name, P[i - 1].name, z_new
+                    p.name, P[i - 1].name, z_new - z_previous
                 )
             )
         z_previous = z_new
@@ -235,6 +252,44 @@ def collectVolumes(planes: list) -> list:
     return V
 
 
+def collectModifiers(planes):
+    """Makes a new list containing all the modifiers applied to planes."""
+    M = []
+    i = 0
+    for p in planes:
+        if p.modifiers is not None:
+            for mod in p.modifiers:
+                if mod not in M:
+                    mod.index = i
+                    M.append(mod)
+                    i += 1
+    return M
+
+
+# TODO move saving functions to their own file
+# TODO abstract filenames into one place where both load and save can find them
+
+
+def createSimulationDirectory(savePath):
+    if not os.path.exists(savePath):
+        os.makedirs(savePath)
+
+
+def saveSimulation(savePath, lam, cylSymmetry):
+    """Saves simulation input parameters to a file.
+
+    Args:
+        lam: Wavelength of the light in vacuum [m].04-PulsePropagationTandemLens-Copy1
+        cylSymmetry: Whether the simulation saves only the y=0 slice.
+    """
+    filename = os.path.join(savePath, "simulation.json")
+    logger.info(f"Saving simulation input parameters.")
+    parameters = {"lam": lam, "cylSymmetry": cylSymmetry}
+    with open(filename, "w") as fp:
+        json.dump(parameters, fp, indent=4)
+
+
+# TODO change to use getSaveData in the grid class, then call saveObject
 def saveGrid(grid: Grid, gridInd: int, savePath: str | os.PathLike):
     """Saves the given grid to a file.
 
@@ -245,6 +300,7 @@ def saveGrid(grid: Grid, gridInd: int, savePath: str | os.PathLike):
     """
     filename = os.path.join(savePath, "grid_{}.h5".format(gridInd))
     logger.info(f"Saving grid {gridInd} to {filename}")
+
     with h5py.File(filename, "w") as f:
         # x direction
         dset_x = f.create_dataset("x/x", shape=(grid.Nx,), dtype="double")
@@ -268,43 +324,54 @@ def saveGrid(grid: Grid, gridInd: int, savePath: str | os.PathLike):
     logger.info(f"Finished saving grid {gridInd}")
 
 
-def savePlanes(P: list, V: list, savePath: str | os.PathLike):
+def savePlanes(P: list, V: list, M: list, savePath: str | os.PathLike):
     """Saves information about the planes to a file.
 
     Args:
         P: List of planes to save to file.
         V: List of volumes to save to file.
+        M: List of modifiers to save to file.
         savePath: Path to save the file at.
     """
+    # TODO: Save which grid is used for each plane in the planes file
     filename = os.path.join(savePath, "planes.h5")
     logger.info(f"Saving plane information to {filename}")
-    N = len(P)
-    M = len(V)
+    Np = len(P)
+    Nv = len(V)
+    Nm = len(M)
     with h5py.File(filename, "w") as f:
-        for i in range(N):
+        for i in range(Np):
             plane = P[i]
-            saveObject(f, plane, f"p{i}", i)
+            modifiers = getModifierAttr(plane)
+            saveObject(f, plane, f"p{i}", i, modifierIndexes=modifiers)
 
-        for i in range(M):
+        for i in range(Nv):
             volume = V[i]
-            saveObject(f, volume, f"v{i}", i)
+            modifiers = getModifierAttr(volume)
+            saveObject(f, volume, f"v{i}", i, modifierIndexes=modifiers)
 
-    logger.info(f"Finished saving plane information")
+        for i in range(Nm):
+            modifier = M[i]
+            saveObject(f, modifier, f"m{i}", i)
+
+    logger.info("Finished saving plane information")
 
 
-def saveObject(f: h5py.File, object, name: str, ind):
+def saveObject(f: h5py.File, object, name: str, ind, **kwargs):
     """Saves the objects save data into the given hdf5 file.
 
     Args:
         f: The hdf5 file object to save the data to.
         object: The object whose save data should be saved. The object must have
-            a method called getSaveData that return two dictionaries: attrs and data.
+            a method called getSaveData that returns two dictionaries: attrs and data.
         name: Name of the group representing the object in the dataset. Must be a
             unique identifier.
         ind: Index of the object in the planes or volumes list.
+        **kwargs: Any additional attrs to add, will overwrite keys in attr from getSaveData.
     """
     attr, data = object.getSaveData()
     attr["index"] = ind
+    attr = attr | kwargs
     # Save the attrs as hdf5 attrs
     group = f.create_group(name)
     group.attrs.update(attr)
@@ -316,6 +383,7 @@ def saveObject(f: h5py.File, object, name: str, ind):
         dset[...] = value
 
 
+# TODO implement diagnostics and cylindrically symmetric grids
 def saveField(
     E,
     plane: Plane,
@@ -349,4 +417,12 @@ def saveField(
         dset.attrs["z"] = plane.z
         dset.attrs["index"] = ind
         dset.attrs["gridIndex"] = gridInd
-    # logger.info(f"Finished saving field at plane {plane.name}")
+    logger.info(f"Finished saving field at plane {plane.name}")
+
+
+def getModifierAttr(plane):
+    modifiers = []
+    if plane.modifiers is not None:
+        for mod in plane.modifiers:
+            modifiers.append(mod.index)
+    return modifiers

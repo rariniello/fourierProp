@@ -25,12 +25,16 @@ class Optic(Plane):
         self._phi = None
         self._t = None
 
-    def modifyField(self, E: np.ndarray) -> np.ndarray:
+    def modifyField(self, E: np.ndarray, lam: float) -> np.ndarray:
         """Returns the field after the optic.
 
         Subclasses should implement this if they want to generate the phase and transmission
         mask at simulation time. Otherwise, they can generate the phase and transmission mask
         at intiialization and set the phi and transmission attributes.
+
+        Args:
+            E: Electric field on the upstream side of the plane, complex representation [V/m].
+            lam: Wavelength of the light in vacuum [m].
 
         Returns:
             A numpy array with the electric field on the second plane in complex

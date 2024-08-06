@@ -13,29 +13,39 @@ class Plane:
         name: Name of the plane, only a referene for the user. Does not have to be unique.
     """
 
-    def __init__(self, z: float, n: float, name: str):
+    def __init__(self, z: float, n: float, name: str, modifiers=None):
         self.z = z
         self.n = n
         self.name = name
+        if not isinstance(modifiers, list) and modifiers is not None:
+            modifiers = [modifiers]
+        self.modifiers = modifiers
 
-    def modifyField(self, E: np.ndarray) -> np.ndarray:
+    def modifyField(self, E: np.ndarray, lam: float) -> np.ndarray:
         """Modifes the given field on the upstream side of the plane to get the field on the downstream side.
 
         Subclasses should implement this if they want to change the field as it passes the plane.
 
         Args:
             E: Electric field on the upstream side of the plane, complex representation [V/m].
+            lam: Wavelength of the light in vacuum [m].
 
         Returns:
-            A numpy array with the electric field on the second plane in complex
+            A numpy array with the electric field after being modified in complex
             representation [V/m]. Must have the same dimensions as the input array.
         """
+        if self.modifiers is not None:
+            for mod in self.modifiers:
+                E = mod.modifyField(E, lam)
         return E
 
     def isVolume(self) -> bool:
         return False
 
     def isResample(self) -> bool:
+        return False
+
+    def isSource(self) -> bool:
         return False
 
     def getSaveData(self) -> tuple[dict, dict]:

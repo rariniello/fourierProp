@@ -1,5 +1,6 @@
 import numpy as np
-from scipy.interpolate import interp1d, interp2d
+from scipy.interpolate import interp1d, interp2d, RectBivariateSpline
+from scipy.interpolate import RegularGridInterpolator as RGI
 
 from fourierProp.planes import Plane
 from fourierProp import Grid
@@ -28,6 +29,8 @@ class ResamplePlane(Plane):
         """
         grid1 = grid
         grid2 = self.grid
+        # TODO check if grids are radial grids and implement the radial->cartesian,
+        #  cartesian->radial, and radial->radial resampling
         if self.cylSymmetric:
             E = resampleRadialInterpolation(E, grid1, grid2)
         else:
@@ -50,7 +53,12 @@ def resampleRadialInterpolation(E: np.ndarray, grid1: Grid, grid2: Grid) -> np.n
         A numpy array representing the field on grid2.
     """
     r = grid1.x
-    data = np.array(E[:, int(grid1.Ny / 2)])
+    if E.ndim == 2:
+        data = np.array(E[:, int(grid1.Ny / 2)])
+    elif E.ndim == 1:
+        data = E
+    else:
+        raise ValueError("E must have either 1 or 2 dimensions, not {}".format(E.ndim))
     x = grid2.x
     y = grid2.y
     return radialInterpolationToGrid(r, data, x, y)
@@ -87,12 +95,19 @@ def resample2dInterpolation(E: np.ndarray, grid1: Grid, grid2: Grid) -> np.ndarr
     Returns:
         A numpy array representing the field on grid2.
     """
-    f_r = interp2d(
-        grid1.x, grid1.y, E.real, "cubic", bounds_error=False, fill_value=0.0
-    )
-    f_i = interp2d(
-        grid1.x, grid1.y, E.imag, "cubic", bounds_error=False, fill_value=0.0
-    )
+    # The new version of scipy has removed interp2d and the replacement is incredibly slow
+    # We will need a new solution here
+    # f_r = interp2d(
+    #     grid1.x, grid1.y, E.real, "cubic", bounds_error=False, fill_value=0.0
+    # )
+    # f_i = interp2d(
+    #     grid1.x, grid1.y, E.imag, "cubic", bounds_error=False, fill_value=0.0
+    # )
+    # Incredibly slow?
+    # f = RGI((grid1.x, grid1.y), E, "cubic", bounds_error=False, fill_value=0.0)
+    # This will have a problem with increasing the grid size...
+    f_r = RectBivariateSpline(grid1.x, grid1.y, E.real)
+    f_i = RectBivariateSpline(grid1.x, grid1.y, E.imag)
     E_r = f_r(grid2.x, grid2.y)
     E_i = f_i(grid2.x, grid2.y)
     return E_r + 1j * E_i
