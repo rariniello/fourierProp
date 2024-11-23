@@ -58,6 +58,7 @@ class Optic(Plane):
     def phi(self) -> np.ndarray | None:
         return self._phi
 
+    # TODO update grid interaction
     @phi.setter
     def phi(self, value: np.ndarray | None):
         if (value is not None) and (np.shape(value) != (self.grid.Nx, self.grid.Ny)):
@@ -73,6 +74,7 @@ class Optic(Plane):
     def transmission(self) -> np.ndarray | None:
         return self._phi
 
+    # TODO update grid interaction
     @transmission.setter
     def transmission(self, value: np.ndarray | None):
         if (value is not None) and (np.shape(value) != (self.grid.Nx, self.grid.Ny)):

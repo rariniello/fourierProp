@@ -4,7 +4,7 @@ import fourierProp.load as load
 import fourierProp.grid as grid
 from fourierProp.planes import Plane
 from fourierProp.planes import resample
-from fourierProp import Grid
+from fourierProp.grid import BaseGrid
 
 
 class Source(Plane):
@@ -21,7 +21,7 @@ class Source(Plane):
         E: The electric field on the plane in complex representation [V/m].
     """
 
-    def __init__(self, z: float, n: float, name: str, grid: Grid):
+    def __init__(self, z: float, n: float, name: str, grid: BaseGrid):
         super().__init__(z, n, name)
         self.grid = grid
 
@@ -48,10 +48,10 @@ class Source(Plane):
 
     @E.setter
     def E(self, value: np.ndarray):
-        if np.shape(value) != (self.grid.Nx, self.grid.Ny):
+        if np.shape(value) != self.grid.shape:
             raise ValueError(
-                "E size does not match grid size, E:({}, {}), grid ({}, {}).".format(
-                    np.shape(value)[0], np.shape(value)[1], self.grid.Nx, self.grid.Ny
+                "E size does not match grid size, E:{}, grid: {}.".format(
+                    np.shape(value), self.grid.shape
                 )
             )
         else:
@@ -77,7 +77,7 @@ class LoadField(Source):
         z: float,
         n: float,
         name: str,
-        grid: Grid,
+        grid: BaseGrid,
         loadPath,
         ind=None,
         loadName=None,

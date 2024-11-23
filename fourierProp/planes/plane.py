@@ -2,13 +2,13 @@ import numpy as np
 
 
 class Plane:
-    """Describes a plane perpendicular to the z axis that the field is defined on.
+    """A plane perpendicular to the z axis that the field is defined on.
 
     This class can be used directly as a measurement plane, i.e., a plane where the
-    field is calculated at, but otherwise doesn't modify the plane at all.
+    field is calculated at, but doesn't modify the field at all.
 
     Attributes:
-        z: Location of the plane along the z-axis.
+        z: Location of the plane along the z-axis [m].
         n: Index of refraction of the medium on the downstream side of the plane.
         name: Name of the plane, only a referene for the user. Does not have to be unique.
     """
@@ -20,6 +20,7 @@ class Plane:
         if not isinstance(modifiers, list) and modifiers is not None:
             modifiers = [modifiers]
         self.modifiers = modifiers
+        self.grid = None
 
     def modifyField(self, E: np.ndarray, lam: float) -> np.ndarray:
         """Modifes the given field on the upstream side of the plane to get the field on the downstream side.
