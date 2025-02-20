@@ -6,7 +6,7 @@ class Modifier:
         self.name = name
         self.index = None
 
-    def modifyField(self, E: np.ndarray, lam: float) -> np.ndarray:
+    def modifyField(self, E: np.ndarray, lam: float, grid) -> np.ndarray:
         """Modifes the field at a plane.
 
         Subclasses implement this to modify the field on the parent plane.

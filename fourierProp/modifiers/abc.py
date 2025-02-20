@@ -20,7 +20,7 @@ class AbsorbingBoundaryCondition(Modifier):
         ) ** self.beta + 0.5 * (1 + self.gamma)
         self.Tr = np.flip(self.T)
 
-    def modifyField(self, E: np.ndarray, lam: float) -> np.ndarray:
+    def modifyField(self, E: np.ndarray, lam: float, grid) -> np.ndarray:
         """Applies the absorbing boundary conditions to the plane.
 
         Args:
@@ -31,16 +31,17 @@ class AbsorbingBoundaryCondition(Modifier):
             A numpy array with the absorbing boundary conditions applied in complex
             representation [V/m]. Must have the same dimensions as the input array.
         """
-        # TODO modify to handle cylindrically symmetric grids
-        shape = np.shape(E)
-        Nx = shape[0]
-        Ny = shape[1]
         Nw = self.Nw
-
-        E[:Nw, :] *= self.T[:, None]
-        E[-Nw:, :] *= self.Tr[:, None]
-        E[:, :Nw] *= self.T[None, :]
-        E[:, -Nw:] *= self.Tr[None, :]
+        if grid.gridType == "Cartesian":
+            E[:Nw, :] *= self.T[:, None]
+            E[-Nw:, :] *= self.Tr[:, None]
+            E[:, :Nw] *= self.T[None, :]
+            E[:, -Nw:] *= self.Tr[None, :]
+        elif (
+            grid.gridType == "Cylindrical"
+            or grid.gridType == "Cylindrical_SymmetricHankel"
+        ):
+            E[-Nw:] *= self.Tr
         return E
 
     def getSaveData(self) -> tuple[dict, dict]:

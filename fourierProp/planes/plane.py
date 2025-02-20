@@ -37,7 +37,7 @@ class Plane:
         """
         if self.modifiers is not None:
             for mod in self.modifiers:
-                E = mod.modifyField(E, lam)
+                E = mod.modifyField(E, lam, self.grid)
         return E
 
     def isVolume(self) -> bool:

@@ -290,6 +290,7 @@ def assignGridsToPlanes(P: list) -> list:
     """
     grid = P[0].grid
     G = [grid]
+    clearGridInd(P)
     gridInd = 0
     for i, p in enumerate(P):
         if i == 0:  # Skip the source plane
@@ -305,6 +306,16 @@ def assignGridsToPlanes(P: list) -> list:
             p.grid = grid
             p.gridInd = gridInd
     return G
+
+
+def clearGridInd(P):
+    grid = P[0].grid
+    for i, p in enumerate(P):
+        if i == 0:  # Skip the source plane
+            grid.gridInd = None
+        elif p.isResample():
+            grid = p.grid
+            grid.gridInd = None
 
 
 def createPlaneList(planes: list) -> list:
