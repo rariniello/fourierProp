@@ -1,14 +1,13 @@
-import os
-import numpy as np
-from scipy.special import jn_zeros, jv
-import h5py
-import pyfftw
-import logging
 import json
+import logging
+import os
 
-from fourierProp import Plane
-from fourierProp import Grid, CylGrid, CylGridSym
-from fourierProp import Source
+import h5py
+import numpy as np
+import pyfftw
+from scipy.special import jn_zeros, jv
+
+from fourierProp import CylGrid, CylGridSym, Grid, Plane, Source
 
 logging.basicConfig(
     format="%(asctime)s.%(msecs)03d - %(message)s",
@@ -496,7 +495,7 @@ def saveField(
         if diagnostics == "y" and len(size) == 2:
             dset = f.create_dataset("E", shape=(size[0],), dtype=dtype)
             dset[...] = E[int(size[0] / 2), :]
-        else:
+        if diagnostics != "x" and diagnostics != "y":
             dset = f.create_dataset("E", shape=(size), dtype=dtype)
             dset[...] = E
         dset.attrs["z"] = plane.z
